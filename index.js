@@ -26,20 +26,36 @@ app.use(express.static("public"));
 app.use(passport.initialize());
 app.use(passport.session());
 
-// Create database client with longer timeout
-const db = new pg.Client({
-  user: process.env.PG_USER,
-  host: process.env.PG_HOST,
-  database: process.env.PG_DATABASE,
-  password: process.env.PG_PASSWORD,
-  port: process.env.PG_PORT,
-  ssl: true, // Simplified SSL setting
-  connectionTimeoutMillis: 60000, // 60 seconds timeout
-  query_timeout: 60000 // 60 seconds query timeout
-});
+// Create database client based on connection method
+let db;
+console.log("Setting up database connection...");
+
+// Try connection string approach if DATABASE_URL is provided
+if (process.env.DATABASE_URL) {
+  console.log("Using connection string approach");
+  db = new pg.Client({
+    connectionString: process.env.DATABASE_URL,
+    ssl: true,
+    connectionTimeoutMillis: 60000,
+    query_timeout: 60000
+  });
+} else {
+  // Use individual parameters approach
+  console.log("Using individual parameters approach");
+  db = new pg.Client({
+    user: process.env.PG_USER,
+    host: process.env.PG_HOST,
+    database: process.env.PG_DATABASE,
+    password: process.env.PG_PASSWORD,
+    port: process.env.PG_PORT,
+    ssl: true,
+    connectionTimeoutMillis: 60000,
+    query_timeout: 60000
+  });
+}
 
 // Connect with error handling
-console.log("Attempting database connection to:", process.env.PG_HOST);
+console.log("Attempting database connection to:", process.env.DATABASE_URL || process.env.PG_HOST);
 let dbConnected = false;
 
 db.connect()
@@ -480,6 +496,95 @@ app.get("/connection-fix-test", async (req, res) => {
     
     response += "\nCONCLUSION: Connection issues persist. See above recommendations.";
   }
+  
+  res.send(response);
+});
+
+// Add this final test route
+app.get("/direct-connect-test", async (req, res) => {
+  res.setHeader('Content-Type', 'text/plain');
+  let response = "DIRECT CONNECTION TEST\n";
+  response += "======================\n\n";
+  
+  // Try different connection approaches
+  
+  // Approach 1: Direct connection string with minimal parameters
+  response += "APPROACH 1: DIRECT CONNECTION STRING\n";
+  try {
+    const connectionString = `postgresql://${process.env.PG_USER}:${encodeURIComponent(process.env.PG_PASSWORD)}@${process.env.PG_HOST}:${process.env.PG_PORT}/${process.env.PG_DATABASE}`;
+    response += "Connection string created (password hidden)\n";
+    
+    const testClient1 = new pg.Client({
+      connectionString: connectionString,
+      ssl: true
+    });
+    
+    response += "- Attempting connection...\n";
+    await testClient1.connect();
+    const result1 = await testClient1.query("SELECT NOW()");
+    response += `- Success! Server time: ${result1.rows[0].now}\n`;
+    await testClient1.end();
+    
+    response += "Approach 1: CONNECTION SUCCESSFUL!\n\n";
+    return res.send(response + "CONNECTION SUCCESSFUL! Use a connection string approach.");
+    
+  } catch (err) {
+    response += `- Error: ${err.message}\n\n`;
+  }
+  
+  // Approach 2: No SSL configuration
+  response += "APPROACH 2: NO SSL CONFIGURATION\n";
+  try {
+    const testClient2 = new pg.Client({
+      user: process.env.PG_USER,
+      host: process.env.PG_HOST,
+      database: process.env.PG_DATABASE,
+      password: process.env.PG_PASSWORD,
+      port: process.env.PG_PORT
+      // No SSL config at all
+    });
+    
+    response += "- Attempting connection...\n";
+    await testClient2.connect();
+    const result2 = await testClient2.query("SELECT NOW()");
+    response += `- Success! Server time: ${result2.rows[0].now}\n`;
+    await testClient2.end();
+    
+    response += "Approach 2: CONNECTION SUCCESSFUL!\n\n";
+    return res.send(response + "CONNECTION SUCCESSFUL! Try with no SSL configuration.");
+    
+  } catch (err) {
+    response += `- Error: ${err.message}\n\n`;
+  }
+  
+  // Approach 3: sslmode=require in connection string
+  response += "APPROACH 3: SSLMODE=REQUIRE\n";
+  try {
+    const connectionString = `postgresql://${process.env.PG_USER}:${encodeURIComponent(process.env.PG_PASSWORD)}@${process.env.PG_HOST}:${process.env.PG_PORT}/${process.env.PG_DATABASE}?sslmode=require`;
+    
+    const testClient3 = new pg.Client({
+      connectionString: connectionString
+    });
+    
+    response += "- Attempting connection...\n";
+    await testClient3.connect();
+    const result3 = await testClient3.query("SELECT NOW()");
+    response += `- Success! Server time: ${result3.rows[0].now}\n`;
+    await testClient3.end();
+    
+    response += "Approach 3: CONNECTION SUCCESSFUL!\n\n";
+    return res.send(response + "CONNECTION SUCCESSFUL! Use sslmode=require in connection string.");
+    
+  } catch (err) {
+    response += `- Error: ${err.message}\n\n`;
+  }
+  
+  // If all approaches failed
+  response += "All connection approaches failed.\n\n";
+  response += "RECOMMENDATIONS:\n";
+  response += "1. Double-check your database password - reset it in Supabase\n";
+  response += "2. Verify your database is active and not in maintenance mode\n";
+  response += "3. Try a direct connection from another client like pgAdmin\n";
   
   res.send(response);
 });
