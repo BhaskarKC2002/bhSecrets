@@ -26,6 +26,7 @@ app.use(express.static("public"));
 app.use(passport.initialize());
 app.use(passport.session());
 
+// Create database client with longer timeout
 const db = new pg.Client({
   user: process.env.PG_USER,
   host: process.env.PG_HOST,
@@ -33,9 +34,34 @@ const db = new pg.Client({
   password: process.env.PG_PASSWORD,
   port: process.env.PG_PORT,
   ssl: { rejectUnauthorized: false },
-  connectionTimeoutMillis: 15000 // 15 second timeout
+  connectionTimeoutMillis: 30000, // 30 seconds timeout
+  query_timeout: 60000 // 60 seconds query timeout
 });
-db.connect();
+
+// Connect with error handling
+console.log("Attempting database connection to:", process.env.PG_HOST);
+let dbConnected = false;
+
+db.connect()
+  .then(() => {
+    console.log("Database connected successfully!");
+    dbConnected = true;
+  })
+  .catch(err => {
+    console.error("Database connection error:", err);
+    console.log("Application will run with limited functionality.");
+    // Continue running the app even if database connection fails
+  });
+
+// Middleware to check database connection
+const checkDbConnection = (req, res, next) => {
+  if (!dbConnected && (req.path.includes('/register') || req.path.includes('/login') || req.path.includes('/secrets') || req.path.includes('/submit'))) {
+    return res.status(503).send('Database is currently unavailable. Please try again later.');
+  }
+  next();
+};
+
+app.use(checkDbConnection);
 
 app.get("/", (req, res) => {
   res.render("home.ejs");
@@ -112,35 +138,52 @@ app.post(
 );
 
 app.post("/register", async (req, res) => {
+  if (!dbConnected) {
+    return res.status(503).send('Database is currently unavailable. Please try again later.');
+  }
+  
   const email = req.body.username;
   const password = req.body.password;
 
   try {
+    console.log("Attempting to register user:", email);
     const checkResult = await db.query("SELECT * FROM users WHERE email = $1", [
       email,
     ]);
 
     if (checkResult.rows.length > 0) {
-      req.redirect("/login");
+      console.log("User already exists, redirecting to login");
+      res.redirect("/login");
     } else {
       bcrypt.hash(password, saltRounds, async (err, hash) => {
         if (err) {
           console.error("Error hashing password:", err);
+          return res.status(500).send("Error during registration. Please try again.");
         } else {
-          const result = await db.query(
-            "INSERT INTO users (email, password) VALUES ($1, $2) RETURNING *",
-            [email, hash]
-          );
-          const user = result.rows[0];
-          req.login(user, (err) => {
-            console.log("success");
-            res.redirect("/secrets");
-          });
+          try {
+            const result = await db.query(
+              "INSERT INTO users (email, password) VALUES ($1, $2) RETURNING *",
+              [email, hash]
+            );
+            const user = result.rows[0];
+            req.login(user, (err) => {
+              if (err) {
+                console.error("Login error after registration:", err);
+                return res.status(500).send("Error during login. Please try again.");
+              }
+              console.log("Registration successful, redirecting to secrets");
+              res.redirect("/secrets");
+            });
+          } catch (dbErr) {
+            console.error("Database error during user creation:", dbErr);
+            res.status(500).send("Error saving user. Please try again.");
+          }
         }
       });
     }
   } catch (err) {
-    console.log(err);
+    console.error("Registration error:", err);
+    res.status(500).send("Registration error. Please try again later.");
   }
 });
 
@@ -230,20 +273,70 @@ passport.deserializeUser((user, cb) => {
 });
 
 app.get("/db-test", async (req, res) => {
+  // Show connection details (excluding password)
+  const connectionInfo = {
+    host: process.env.PG_HOST,
+    user: process.env.PG_USER,
+    database: process.env.PG_DATABASE,
+    port: process.env.PG_PORT,
+    ssl: true,
+    connected: dbConnected
+  };
+  
+  // If we're already connected, show that
+  if (dbConnected) {
+    try {
+      const result = await db.query("SELECT NOW() as time, current_database() as database, version() as version");
+      return res.send({
+        status: "connected",
+        message: "Database connected successfully!",
+        connection: connectionInfo,
+        serverInfo: result.rows[0]
+      });
+    } catch (err) {
+      console.error("Error in db-test route:", err);
+      return res.status(500).send({
+        status: "error",
+        message: "Error querying database",
+        connection: connectionInfo,
+        error: err.message
+      });
+    }
+  }
+  
+  // If not connected, try to connect now
   try {
-    console.log("Database connection attempt with:", {
+    console.log("Attempting test connection to database");
+    // Create a new client just for this test
+    const testClient = new pg.Client({
       user: process.env.PG_USER,
       host: process.env.PG_HOST,
       database: process.env.PG_DATABASE,
+      password: process.env.PG_PASSWORD,
       port: process.env.PG_PORT,
-      // Not logging password for security
+      ssl: { rejectUnauthorized: false },
+      connectionTimeoutMillis: 15000 // 15 seconds
     });
     
-    const result = await db.query("SELECT NOW()");
-    res.send(`Database connected successfully: ${result.rows[0].now}`);
+    await testClient.connect();
+    const result = await testClient.query("SELECT NOW()");
+    await testClient.end();
+    
+    return res.send({
+      status: "test_success",
+      message: "Test connection successful, but main connection failed. App may need restart.",
+      connection: connectionInfo,
+      serverTime: result.rows[0].now
+    });
   } catch (err) {
-    console.error("Database connection error:", err);
-    res.status(500).send(`Database connection error: ${err.message}`);
+    console.error("Test connection failed:", err);
+    return res.status(500).send({
+      status: "test_failed",
+      message: "Both main and test connections failed",
+      connection: connectionInfo,
+      error: err.message,
+      errorDetail: err.toString()
+    });
   }
 });
 
