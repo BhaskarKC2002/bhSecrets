@@ -35,7 +35,9 @@ if (process.env.DATABASE_URL) {
   console.log("Using connection string approach");
   db = new pg.Client({
     connectionString: process.env.DATABASE_URL,
-    ssl: true,
+    ssl: {
+      rejectUnauthorized: false // This allows self-signed certificates
+    },
     connectionTimeoutMillis: 60000,
     query_timeout: 60000
   });
@@ -48,7 +50,9 @@ if (process.env.DATABASE_URL) {
     database: process.env.PG_DATABASE,
     password: process.env.PG_PASSWORD,
     port: process.env.PG_PORT,
-    ssl: true,
+    ssl: {
+      rejectUnauthorized: false // This allows self-signed certificates
+    },
     connectionTimeoutMillis: 60000,
     query_timeout: 60000
   });
@@ -466,7 +470,9 @@ app.get("/connection-fix-test", async (req, res) => {
       database: process.env.PG_DATABASE,
       password: process.env.PG_PASSWORD,
       port: process.env.PG_PORT,
-      ssl: true, // Try simple SSL setting
+      ssl: {
+        rejectUnauthorized: false
+      },
       connectionTimeoutMillis: 60000 // Very long 60 second timeout
     });
     
@@ -516,7 +522,9 @@ app.get("/direct-connect-test", async (req, res) => {
     
     const testClient1 = new pg.Client({
       connectionString: connectionString,
-      ssl: true
+      ssl: {
+        rejectUnauthorized: false
+      }
     });
     
     response += "- Attempting connection...\n";
@@ -533,15 +541,17 @@ app.get("/direct-connect-test", async (req, res) => {
   }
   
   // Approach 2: No SSL configuration
-  response += "APPROACH 2: NO SSL CONFIGURATION\n";
+  response += "APPROACH 2: SSL REJECT UNAUTHORIZED FALSE\n";
   try {
     const testClient2 = new pg.Client({
       user: process.env.PG_USER,
       host: process.env.PG_HOST,
       database: process.env.PG_DATABASE,
       password: process.env.PG_PASSWORD,
-      port: process.env.PG_PORT
-      // No SSL config at all
+      port: process.env.PG_PORT,
+      ssl: {
+        rejectUnauthorized: false
+      }
     });
     
     response += "- Attempting connection...\n";
@@ -558,12 +568,15 @@ app.get("/direct-connect-test", async (req, res) => {
   }
   
   // Approach 3: sslmode=require in connection string
-  response += "APPROACH 3: SSLMODE=REQUIRE\n";
+  response += "APPROACH 3: CONNECTION STRING WITH SSLMODE\n";
   try {
     const connectionString = `postgresql://${process.env.PG_USER}:${encodeURIComponent(process.env.PG_PASSWORD)}@${process.env.PG_HOST}:${process.env.PG_PORT}/${process.env.PG_DATABASE}?sslmode=require`;
     
     const testClient3 = new pg.Client({
-      connectionString: connectionString
+      connectionString: connectionString,
+      ssl: {
+        rejectUnauthorized: false
+      }
     });
     
     response += "- Attempting connection...\n";
