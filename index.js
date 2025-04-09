@@ -32,7 +32,8 @@ const db = new pg.Client({
   database: process.env.PG_DATABASE,
   password: process.env.PG_PASSWORD,
   port: process.env.PG_PORT,
-  ssl: { rejectUnauthorized: false }
+  ssl: { rejectUnauthorized: false },
+  connectionTimeoutMillis: 15000 // 15 second timeout
 });
 db.connect();
 
@@ -226,6 +227,24 @@ passport.serializeUser((user, cb) => {
 
 passport.deserializeUser((user, cb) => {
   cb(null, user);
+});
+
+app.get("/db-test", async (req, res) => {
+  try {
+    console.log("Database connection attempt with:", {
+      user: process.env.PG_USER,
+      host: process.env.PG_HOST,
+      database: process.env.PG_DATABASE,
+      port: process.env.PG_PORT,
+      // Not logging password for security
+    });
+    
+    const result = await db.query("SELECT NOW()");
+    res.send(`Database connected successfully: ${result.rows[0].now}`);
+  } catch (err) {
+    console.error("Database connection error:", err);
+    res.status(500).send(`Database connection error: ${err.message}`);
+  }
 });
 
 app.listen(port, () => {
