@@ -1,0 +1,111 @@
+:root {
+  --primary-color: #6c63ff;
+  --secondary-color: #4a3df7;
+  --text-color: #333;
+  --light-bg: #f8f9fa;
+  --dark-bg: #343a40;
+  --accent-color: #ff6584;
+  --success-color: #28a745;
+}
+
+body {
+  background-color: var(--light-bg);
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  color: var(--text-color);
+  transition: background-color 0.3s ease;
+}
+
+.centered {
+  padding-top: 150px;
+  text-align: center;
+}
+
+.jumbotron {
+  background-color: white;
+  border-radius: 10px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1);
+  padding: 2rem;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.jumbotron:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.15);
+}
+
+.secret-text {
+  text-align: center;
+  font-size: 1.8rem;
+  color: white;
+  background-color: var(--primary-color);
+  padding: 1.5rem;
+  border-radius: 8px;
+  box-shadow: 0 4px 15px rgba(108, 99, 255, 0.2);
+  margin: 2rem 0;
+}
+
+.btn {
+  border-radius: 30px;
+  padding: 0.5rem 1.5rem;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  margin: 0.5rem;
+}
+
+.btn-light {
+  background-color: white;
+  border: 1px solid #ddd;
+  color: var(--text-color);
+}
+
+.btn-light:hover {
+  background-color: #f8f9fa;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+}
+
+.btn-dark {
+  background-color: var(--primary-color);
+  border: none;
+  color: white;
+}
+
+.btn-dark:hover {
+  background-color: var(--secondary-color);
+  box-shadow: 0 5px 15px rgba(108, 99, 255, 0.3);
+}
+
+.fa-key {
+  color: var(--primary-color);
+  margin-bottom: 1.5rem;
+  filter: drop-shadow(0 5px 15px rgba(108, 99, 255, 0.3));
+}
+
+.display-3 {
+  font-weight: 700;
+  color: var(--dark-bg);
+  margin-bottom: 1rem;
+}
+
+.lead {
+  font-size: 1.3rem;
+  color: #6c757d;
+  margin-bottom: 2rem;
+}
+
+.form-control {
+  border-radius: 8px;
+  padding: 0.8rem 1rem;
+  margin-bottom: 1.5rem;
+  border: 1px solid #ddd;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.form-control:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 0.2rem rgba(108, 99, 255, 0.25);
+}
+
+hr {
+  margin: 2rem 0;
+  border-top: 1px solid rgba(0, 0, 0, 0.05);
+}
