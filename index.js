@@ -602,6 +602,159 @@ app.get("/direct-connect-test", async (req, res) => {
   res.send(response);
 });
 
+// Add this new test route
+app.get("/pooler-test", async (req, res) => {
+  res.setHeader('Content-Type', 'text/plain');
+  let response = "TRANSACTION POOLER TEST\n";
+  response += "=======================\n\n";
+  
+  response += "Testing direct connection to Transaction Pooler...\n\n";
+  
+  // Check if DATABASE_URL is set
+  if (!process.env.DATABASE_URL) {
+    return res.send(response + "ERROR: DATABASE_URL environment variable is not set!");
+  }
+  
+  response += `DATABASE_URL is set (not showing for security)\n`;
+  response += `Length of connection string: ${process.env.DATABASE_URL.length} characters\n\n`;
+  
+  try {
+    // Create a client specifically for the pooler
+    const poolerClient = new pg.Client({
+      connectionString: process.env.DATABASE_URL,
+      ssl: {
+        rejectUnauthorized: false
+      },
+      connectionTimeoutMillis: 60000
+    });
+    
+    response += "Connecting to Transaction Pooler...\n";
+    await poolerClient.connect();
+    
+    response += "Connection successful!\n\n";
+    response += "Testing simple query...\n";
+    
+    const result = await poolerClient.query("SELECT current_database(), current_user, version()");
+    response += `Database: ${result.rows[0].current_database}\n`;
+    response += `User: ${result.rows[0].current_user}\n`;
+    response += `Version: ${result.rows[0].version}\n\n`;
+    
+    // Test if users table exists
+    try {
+      const tableCheck = await poolerClient.query(
+        "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'users')"
+      );
+      response += `Users table exists: ${tableCheck.rows[0].exists}\n\n`;
+      
+      if (!tableCheck.rows[0].exists) {
+        response += "Creating users table...\n";
+        await poolerClient.query(`
+          CREATE TABLE IF NOT EXISTS users (
+            id SERIAL PRIMARY KEY,
+            email VARCHAR(100) UNIQUE NOT NULL,
+            password VARCHAR(100),
+            secret TEXT
+          )
+        `);
+        response += "Users table created successfully!\n";
+      }
+    } catch (tableErr) {
+      response += `Error checking/creating users table: ${tableErr.message}\n`;
+    }
+    
+    await poolerClient.end();
+    response += "CONCLUSION: Transaction Pooler connection works perfectly!";
+    
+  } catch (err) {
+    response += `Connection failed: ${err.message}\n`;
+    response += `Error details: ${err.toString()}\n\n`;
+    
+    if (err.message.includes('timeout')) {
+      response += "This is likely due to network connectivity issues between Render and Supabase.\n\n";
+      response += "RECOMMENDATIONS:\n";
+      response += "1. Double-check the Transaction Pooler URL format\n";
+      response += "2. Try the Session Pooler URL instead\n";
+      response += "3. Consider using a different database provider like Railway.app or Neon.tech\n";
+    }
+    
+    response += "CONCLUSION: Could not connect to Transaction Pooler.";
+  }
+  
+  res.send(response);
+});
+
+// Add this session pooler test route
+app.get("/session-pooler-test", async (req, res) => {
+  res.setHeader('Content-Type', 'text/plain');
+  let response = "SESSION POOLER TEST\n";
+  response += "===================\n\n";
+  
+  // Hardcode the session pooler URL for testing
+  // Replace the password with asterisks for security in the response
+  const sessionPoolerUrl = `postgresql://postgres.giokiuvzpilfrbeoyxye:[PASSWORD]@aws-0-ap-south-1.pooler.supabase.com:5432/postgres`;
+  response += `Testing connection with Session Pooler URL: ${sessionPoolerUrl}\n\n`;
+  
+  try {
+    // Create the actual client with the real password
+    const actualSessionPoolerUrl = `postgresql://postgres.giokiuvzpilfrbeoyxye:${process.env.PG_PASSWORD}@aws-0-ap-south-1.pooler.supabase.com:5432/postgres`;
+    
+    const sessionClient = new pg.Client({
+      connectionString: actualSessionPoolerUrl,
+      ssl: {
+        rejectUnauthorized: false
+      },
+      connectionTimeoutMillis: 60000
+    });
+    
+    response += "Connecting to Session Pooler...\n";
+    await sessionClient.connect();
+    
+    response += "Connection successful!\n\n";
+    response += "Testing simple query...\n";
+    
+    const result = await sessionClient.query("SELECT NOW() as time");
+    response += `Current time: ${result.rows[0].time}\n\n`;
+    
+    // Test if users table exists and create it if not
+    try {
+      const tableCheck = await sessionClient.query(
+        "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'users')"
+      );
+      response += `Users table exists: ${tableCheck.rows[0].exists}\n\n`;
+      
+      if (!tableCheck.rows[0].exists) {
+        response += "Creating users table...\n";
+        await sessionClient.query(`
+          CREATE TABLE IF NOT EXISTS users (
+            id SERIAL PRIMARY KEY,
+            email VARCHAR(100) UNIQUE NOT NULL,
+            password VARCHAR(100),
+            secret TEXT
+          )
+        `);
+        response += "Users table created successfully!\n";
+      }
+    } catch (tableErr) {
+      response += `Error checking/creating users table: ${tableErr.message}\n`;
+    }
+    
+    await sessionClient.end();
+    response += "CONCLUSION: Session Pooler connection works! Use this connection string instead.";
+    
+  } catch (err) {
+    response += `Connection failed: ${err.message}\n`;
+    response += `Error details: ${err.toString()}\n\n`;
+    
+    response += "CONCLUSION: Could not connect to Session Pooler either.";
+    response += "\n\nRECOMMENDATIONS:\n";
+    response += "1. Consider using a different database provider like Railway.app or Neon.tech\n";
+    response += "2. Check if Supabase is experiencing outages\n";
+    response += "3. Verify your database password is correct\n";
+  }
+  
+  res.send(response);
+});
+
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
 });
